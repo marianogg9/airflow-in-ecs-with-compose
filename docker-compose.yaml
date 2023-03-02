@@ -126,7 +126,7 @@ services:
     command: 
     - -c
     - |
-      curl -s https://gitlab.com/marianogg9/airflow-in-ecs-with-compose/-/blob/main/example-dag/process-employees.py -o dags/process-employees.py
+      curl -s https://gitlab.com/marianogg9/airflow-in-ecs-with-compose/-/raw/main/example-dag/process-employees.py -o dags/process-employees.py
       exec /entrypoint airflow scheduler
     environment:
       <<: *airflow-common-env
