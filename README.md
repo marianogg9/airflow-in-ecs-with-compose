@@ -1,4 +1,4 @@
-# airflow-ecs-compose
+# Airflow in AWS ECS with docker compose
 
 This repository contains all required code to deploy Airflow in ECS using `docker compose` [integration](https://docs.docker.com/cloud/ecs-integration/).
 
