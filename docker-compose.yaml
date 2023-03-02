@@ -126,7 +126,7 @@ services:
     command: 
     - -c
     - |
-      curl -s https://[this_repo]/example-dag/process-employees.py -o dags/process-employees.py
+      curl -s https://gitlab.com/marianogg9/airflow-in-ecs-with-compose/-/blob/main/example-dag/process-employees.py -o dags/process-employees.py
       exec /entrypoint airflow scheduler
     environment:
       <<: *airflow-common-env
@@ -163,7 +163,6 @@ services:
     - -c
     - |
       export _AIRFLOW_WWW_USER_PASSWORD=$$(cat /run/secrets/_AIRFLOW_WWW_USER_PASSWORD)
-      ls -ltrah dags
       exec /entrypoint airflow webserver
     environment:
       <<: *airflow-common-env
