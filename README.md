@@ -175,7 +175,7 @@ If you need to narrow down access, you will have to delete these two additional 
     ```bash
     aws ec2 revoke-security-group-ingress \
         --group-id "<airflow_SG_above_created_id>" \
-        --security-group-rule-ids <self_internal_SG_rule_above_created_id>
+        --security-group-rule-ids "<self_internal_SG_rule_above_created_id>"
     ```
 
     ```bash
