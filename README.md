@@ -104,10 +104,10 @@ If you need to narrow down access, you will have to delete these two additional 
             name: _AIRFLOW_WWW_USER_PASSWORD
             file: ./ui_admin_password
     ```
-  - Add a `secrets` attribute in each (`airflow-`) compose service:
+  - Add a `secrets` attribute `airflow-webserver` compose service:
     ```yaml
     secrets:
-      - ui_admin_password
+      - _AIRFLOW_WWW_USER_PASSWORD
     ```
   - Add the following required AWS Secrets Manager permissions to the IAM credentials you set `docker context` to use:
     - `secretsmanager:CreateSecret`
