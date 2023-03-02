@@ -1,0 +1,196 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+# Basic Airflow cluster configuration for CeleryExecutor with Redis and PostgreSQL.
+#
+# WARNING: This configuration is for local development. Do not use it in a production deployment.
+#
+# This configuration supports basic configuration using environment variables or an .env file
+# The following variables are supported:
+#
+# AIRFLOW_IMAGE_NAME           - Docker image name used to run Airflow.
+#                                Default: apache/airflow:2.5.1
+# AIRFLOW_UID                  - User ID in Airflow containers
+#                                Default: 50000
+# AIRFLOW_PROJ_DIR             - Base path to which all the files will be volumed.
+#                                Default: .
+# Those configurations are useful mostly in case of standalone testing/running Airflow in test/try-out mode
+#
+# _AIRFLOW_WWW_USER_USERNAME   - Username for the administrator account (if requested).
+#                                Default: airflow
+# _AIRFLOW_WWW_USER_PASSWORD   - Password for the administrator account (if requested).
+#                                Default: airflow
+# _PIP_ADDITIONAL_REQUIREMENTS - Additional PIP requirements to add when starting all containers.
+#                                Default: ''
+#
+# Feel free to modify this file to suit your needs.
+#
+# This docker-compose file is based on Airflow's official documentation - please see https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html.
+---
+version: '3'
+x-aws-vpc: "your_vpc_id"
+
+volumes:
+  postgres-db-volume:
+  airflow:
+    driver_opts:
+      uid: 50000
+      gid: 0
+      root_directory: "/dags" 
+      permissions: 755
+
+secrets:
+  _AIRFLOW_WWW_USER_PASSWORD: 
+    name: _AIRFLOW_WWW_USER_PASSWORD
+    file: ./ui_admin_password
+
+networks:
+  back_tier:
+    external: true
+    name: "your_sg_id"
+
+x-airflow-common:
+  &airflow-common
+  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.5.1}
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    # For backward compatibility, with Airflow <2.3
+    AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
+    AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
+  user: "${AIRFLOW_UID:-50000}:0"
+  networks:
+    - back_tier
+  volumes:
+    - airflow:/opt/airflow/dags
+  depends_on:
+    &airflow-common-depends-on
+    redis:
+      condition: service_healthy
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+    networks:
+      - back_tier
+
+  redis:
+    image: redis:latest
+    expose:
+      - 6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 30s
+      retries: 10
+    networks:
+      - back_tier
+
+  airflow-scheduler:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command: 
+    - -c
+    - |
+      curl -s https://[this_repo]/example-dag/process-employees.py -o dags/process-employees.py
+      exec /entrypoint airflow scheduler
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_UPGRADE: 'true'
+    volumes:
+      - airflow:/opt/airflow/dags
+    depends_on:
+      <<: *airflow-common-depends-on
+
+  airflow-worker:
+    <<: *airflow-common
+    command: celery worker
+    deploy:
+      resources:
+        reservations:
+          memory: 2GB
+          cpus: '0.50'
+    environment:
+      <<: *airflow-common-env
+      # Required to handle warm shutdown of the celery workers properly
+      # See https://airflow.apache.org/docs/docker-stack/entrypoint.html#signal-propagation
+      DUMB_INIT_SETSID: "0"
+    volumes:
+      - airflow:/opt/airflow/dags
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-scheduler:
+        condition: service_completed_successfully
+
+  airflow-webserver:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command: 
+    - -c
+    - |
+      export _AIRFLOW_WWW_USER_PASSWORD=$$(cat /run/secrets/_AIRFLOW_WWW_USER_PASSWORD)
+      ls -ltrah dags
+      exec /entrypoint airflow webserver
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: 'airflow'
+    deploy:
+      resources:
+        reservations:
+          memory: 2GB
+          cpus: '0.50'
+    ports:
+      - 8080:8080
+    volumes:
+      - airflow:/opt/airflow/dags
+    secrets:
+      - _AIRFLOW_WWW_USER_PASSWORD
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-scheduler:
+        condition: service_completed_successfully
+  
+  airflow-flower:
+    <<: *airflow-common
+    command: celery flower
+    ports:
+      - 5555:5555
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-scheduler:
+        condition: service_completed_successfully
