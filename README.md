@@ -2,7 +2,7 @@
 
 This repository contains all required code to deploy Airflow in ECS using `docker compose` [integration](https://docs.docker.com/cloud/ecs-integration/).
 
-Please have a look at this [Hashnode article I wrote]() for a walkthrough and an example DAG run.
+Please check out this [Hashnode article I wrote](https://blog.mariano.cloud/airflow-in-ecs-with-redis-part-3-docker-compose) for a walkthrough and an example DAG run.
 
 I have included an example DAG in `example-dag/process-employees.py` taken from [Airflow's example pipeline documentation](https://airflow.apache.org/docs/apache-airflow/stable/tutorial/pipeline.html).
 
